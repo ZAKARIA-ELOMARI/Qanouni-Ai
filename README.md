@@ -16,7 +16,7 @@ This is a chatbot application built with Node.js, Express, MySQL, and OpenAI's A
 ## Setup Instructions
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/Hamza-Elbk/chatbot-API
    cd pp
    ```
 
@@ -26,7 +26,7 @@ This is a chatbot application built with Node.js, Express, MySQL, and OpenAI's A
    ```
 
 3. Configure environment variables:
-   - Rename `.env.example` to `.env` (if applicable).
+   - Rename `.env.example` to `.env` .
    - Update the `.env` file with your database credentials, OpenAI API key, and other configurations.
 
 4. Set up the database:
@@ -44,9 +44,7 @@ This is a chatbot application built with Node.js, Express, MySQL, and OpenAI's A
      npm run dev
      ```
 
-6. Access the application:
-   - Backend API: `http://localhost:3000`
-   - Frontend (if applicable): Update `FRONTEND_URL` in `.env`.
+
 
 ## API Endpoints
 ### Authentication
