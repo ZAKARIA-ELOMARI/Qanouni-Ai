@@ -17,7 +17,7 @@ This is a chatbot application built with Node.js, Express, MySQL, and OpenAI's A
 1. Clone the repository:
    ```bash
    git clone https://github.com/Hamza-Elbk/chatbot-API
-   cd pp
+   cd chatbot-API
    ```
 
 2. Install dependencies:
