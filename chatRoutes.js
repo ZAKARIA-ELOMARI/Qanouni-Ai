@@ -255,7 +255,7 @@ router.post('/conversations/:id/messages', authenticateToken, async (req, res) =
       
       // Get response from OpenAI
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4', // or your preferred model
+        model: 'gpt-4o-mini', // or your preferred model
         messages: chatHistory,
       });
       
