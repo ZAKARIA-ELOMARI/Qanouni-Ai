@@ -57,25 +57,43 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// Retry logic for OpenAI API calls
+async function retryOpenAICall(apiCall, retries = 3, delay = 1000) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      console.error(`OpenAI API call failed (attempt ${attempt}):`, error);
+      if (attempt === retries) throw error;
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+}
+
 // Create a new conversation
 router.post('/conversations', authenticateToken, async (req, res) => {
   try {
     const { title = 'New Conversation' } = req.body;
     const userId = req.user.userId;
-    
-    const [result] = await db.query(
-      'INSERT INTO conversations (user_id, title) VALUES (?, ?)',
-      [userId, title]
-    );
-    
-    res.status(201).json({
-      success: true,
-      conversation: {
-        id: result.insertId,
-        title,
-        created_at: new Date()
-      }
-    });
+
+    try {
+      const result = await db.query(
+        'INSERT INTO conversations (user_id, title) VALUES ($1, $2) RETURNING id, created_at',
+        [userId, title]
+      );
+
+      res.status(201).json({
+        success: true,
+        conversation: {
+          id: result.rows[0].id,
+          title,
+          created_at: result.rows[0].created_at
+        }
+      });
+    } catch (dbError) {
+      console.error('Database error creating conversation:', dbError);
+      throw new Error('Database error');
+    }
   } catch (error) {
     console.error('Error creating conversation:', error);
     res.status(500).json({
@@ -89,16 +107,21 @@ router.post('/conversations', authenticateToken, async (req, res) => {
 router.get('/conversations', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
-    
-    const [conversations] = await db.query(
-      'SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC',
-      [userId]
-    );
-    
-    res.json({
-      success: true,
-      conversations
-    });
+
+    try {
+      const [conversations] = await db.query(
+        'SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC',
+        [userId]
+      );
+
+      res.json({
+        success: true,
+        conversations
+      });
+    } catch (dbError) {
+      console.error('Database error fetching conversations:', dbError);
+      throw new Error('Database error');
+    }
   } catch (error) {
     console.error('Error fetching conversations:', error);
     res.status(500).json({
@@ -113,31 +136,34 @@ router.get('/conversations/:id', authenticateToken, async (req, res) => {
   try {
     const conversationId = req.params.id;
     const userId = req.user.userId;
-    
-    // First verify the conversation belongs to this user
-    const [conversations] = await db.query(
-      'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
-      [conversationId, userId]
-    );
-    
-    if (conversations.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Conversation not found'
+
+    try {
+      const [conversations] = await db.query(
+        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+        [conversationId, userId]
+      );
+
+      if (conversations.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Conversation not found'
+        });
+      }
+
+      const [messages] = await db.query(
+        'SELECT id, content, is_bot, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC',
+        [conversationId]
+      );
+
+      res.json({
+        success: true,
+        conversation: conversations[0],
+        messages
       });
+    } catch (dbError) {
+      console.error('Database error fetching conversation or messages:', dbError);
+      throw new Error('Database error');
     }
-    
-    // Get messages
-    const [messages] = await db.query(
-      'SELECT id, content, is_bot, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC',
-      [conversationId]
-    );
-    
-    res.json({
-      success: true,
-      conversation: conversations[0],
-      messages
-    });
   } catch (error) {
     console.error('Error fetching conversation:', error);
     res.status(500).json({
@@ -153,136 +179,121 @@ router.post('/conversations/:id/messages', authenticateToken, async (req, res) =
     const conversationId = req.params.id;
     const userId = req.user.userId;
     const { message, useFileAssistant = false } = req.body;
-    
+
     if (!message) {
       return res.status(400).json({
         success: false,
         message: 'Message content is required'
       });
     }
-    
-    // Verify the conversation belongs to this user
-    const [conversations] = await db.query(
-      'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
-      [conversationId, userId]
-    );
-    
-    if (conversations.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Conversation not found'
-      });
-    }
-    
-    // Save user message
-    await db.query(
-      'INSERT INTO messages (conversation_id, content, is_bot) VALUES (?, ?, ?)',
-      [conversationId, message, false]
-    );
-    
-    let aiResponse;
-    
-    if (useFileAssistant) {
-      // Use the file assistant for this request
-      try {
-        // Get or create file assistant for this user
-        const { assistantId, threadId } = await getOrCreateFileAssistant(userId);
-        
-        // Add user message to the thread
-        await openai.beta.threads.messages.create(
-          threadId,
-          {
-            role: "user",
-            content: message
-          }
-        );
-        
-        // Run the assistant on the thread
-        const run = await openai.beta.threads.runs.create(
-          threadId,
-          {
-            assistant_id: assistantId
-          }
-        );
-        
-        // Poll for the run status until completion
-        let runStatus;
-        do {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          runStatus = await openai.beta.threads.runs.retrieve(
-            threadId,
-            run.id
-          );
-        } while (runStatus.status !== 'completed' && runStatus.status !== 'failed');
-        
-        if (runStatus.status === 'failed') {
-          throw new Error('Assistant run failed');
-        }
-        
-        // Retrieve the assistant's response
-        const messages = await openai.beta.threads.messages.list(
-          threadId
-        );
-        
-        // Get the latest assistant message
-        const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
-        if (assistantMessages.length > 0) {
-          // Get the text content from the most recent assistant message
-          aiResponse = assistantMessages[0].content[0].text.value;
-        } else {
-          aiResponse = "No response from the file assistant.";
-        }
-      } catch (error) {
-        console.error('Error using file assistant:', error);
-        aiResponse = "There was an error processing your request with the file assistant.";
+
+    try {
+      const result = await db.query(
+        'SELECT * FROM conversations WHERE id = $1 AND user_id = $2',
+        [conversationId, userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Conversation not found'
+        });
       }
-    } else {
-      // Use the standard chat API
-      // Get conversation history for context
-      const [previousMessages] = await db.query(
-        'SELECT content, is_bot FROM messages WHERE conversation_id = ? ORDER BY created_at ASC LIMIT 10',
+
+      await db.query(
+        'INSERT INTO messages (conversation_id, content, is_bot) VALUES ($1, $2, $3)',
+        [conversationId, message, false]
+      );
+
+      let aiResponse;
+
+      if (useFileAssistant) {
+        try {
+          const { assistantId, threadId } = await getOrCreateFileAssistant(userId);
+
+          await retryOpenAICall(() =>
+            openai.beta.threads.messages.create(threadId, {
+              role: "user",
+              content: message
+            })
+          );
+
+          const run = await retryOpenAICall(() =>
+            openai.beta.threads.runs.create(threadId, {
+              assistant_id: assistantId
+            })
+          );
+
+          let runStatus;
+          do {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            runStatus = await retryOpenAICall(() =>
+              openai.beta.threads.runs.retrieve(threadId, run.id)
+            );
+          } while (runStatus.status !== 'completed' && runStatus.status !== 'failed');
+
+          if (runStatus.status === 'failed') {
+            throw new Error('Assistant run failed');
+          }
+
+          const messages = await retryOpenAICall(() =>
+            openai.beta.threads.messages.list(threadId)
+          );
+
+          const assistantMessages = messages.data.filter(msg => msg.role === 'assistant');
+          aiResponse = assistantMessages.length > 0
+            ? assistantMessages[0].content[0].text.value
+            : "No response from the file assistant.";
+        } catch (error) {
+          console.error('Error using file assistant:', error);
+          aiResponse = "There was an error processing your request with the file assistant.";
+        }
+      } else {
+        const previousMessages = await db.query(
+          'SELECT content, is_bot FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC LIMIT 10',
+          [conversationId]
+        );
+
+        const chatHistory = previousMessages.rows.map(msg => ({
+          role: msg.is_bot ? 'assistant' : 'user',
+          content: msg.content
+        }));
+
+        chatHistory.push({ role: 'user', content: message });
+
+        const completion = await retryOpenAICall(() =>
+          openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: chatHistory,
+          })
+        );
+
+        aiResponse = completion.choices[0].message.content;
+      }
+
+      const saveResult = await db.query(
+        'INSERT INTO messages (conversation_id, content, is_bot) VALUES ($1, $2, $3) RETURNING id, created_at',
+        [conversationId, aiResponse, true]
+      );
+
+      await db.query(
+        'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
         [conversationId]
       );
-      
-      // Format messages for OpenAI API
-      const chatHistory = previousMessages.map(msg => ({
-        role: msg.is_bot ? 'assistant' : 'user',
-        content: msg.content
-      }));
-      
-      // Add current message
-      chatHistory.push({ role: 'user', content: message });
-      
-      // Get response from OpenAI
-      const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini', // or your preferred model
-        messages: chatHistory,
+
+      res.json({
+        success: true,
+        message: {
+          id: saveResult.rows[0].id,
+          content: aiResponse,
+          is_bot: true,
+          created_at: saveResult.rows[0].created_at
+        }
       });
-      
-      aiResponse = completion.choices[0].message.content;
+    } catch (dbError) {
+      console.error('Database error processing message:', dbError);
+      throw new Error('Database error');
     }
-    
-    // Save AI response to database
-    const [saveResult] = await db.query(
-      'INSERT INTO messages (conversation_id, content, is_bot) VALUES (?, ?, ?)',
-      [conversationId, aiResponse, true]
-    );
-    
-    // Update conversation timestamp
-    await db.query(
-      'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
-      [conversationId]
-    );
-    
-    res.json({
-      success: true,
-      message: {
-        id: saveResult.insertId,
-        content: aiResponse,
-        is_bot: true,
-        created_at: new Date()
-      }
-    });
   } catch (error) {
     console.error('Error processing message:', error);
     res.status(500).json({
@@ -297,24 +308,28 @@ router.delete('/conversations/:id', authenticateToken, async (req, res) => {
   try {
     const conversationId = req.params.id;
     const userId = req.user.userId;
-    
-    // Verify the conversation belongs to this user
-    const [result] = await db.query(
-      'DELETE FROM conversations WHERE id = ? AND user_id = ?',
-      [conversationId, userId]
-    );
-    
-    if (result.affectedRows === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Conversation not found'
+
+    try {
+      const [result] = await db.query(
+        'DELETE FROM conversations WHERE id = ? AND user_id = ?',
+        [conversationId, userId]
+      );
+
+      if (result.affectedRows === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'Conversation not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Conversation deleted successfully'
       });
+    } catch (dbError) {
+      console.error('Database error deleting conversation:', dbError);
+      throw new Error('Database error');
     }
-    
-    res.json({
-      success: true,
-      message: 'Conversation deleted successfully'
-    });
   } catch (error) {
     console.error('Error deleting conversation:', error);
     res.status(500).json({

@@ -4,6 +4,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const db = require('./db');
 const chatRoutes = require('./chatRoutes');
+const { body, validationResult } = require('express-validator'); // Add express-validator
 
 // Validate essential environment variables
 if (!process.env.JWT_SECRET) {
@@ -16,12 +17,27 @@ if (!process.env.OPENAI_API_KEY) {
     process.exit(1);
 }
 
+// Test database connection
+(async () => {
+    try {
+        await db.query('SELECT 1');
+        console.log('Database connected successfully');
+    } catch (error) {
+        console.error('Error connecting to the database:', error.message);
+        process.exit(1); // Exit the application if the database connection fails
+    }
+})();
+
 const app = express();
 app.use(express.json());
 
 // Enable CORS for front-end integration
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', process.env.FRONTEND_URL || '*');
+    const allowedOrigins = [process.env.FRONTEND_URL];
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
     if (req.method === 'OPTIONS') {
@@ -31,112 +47,123 @@ app.use((req, res, next) => {
 });
 
 // Register endpoint
-app.post('/api/register', async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
-        
-        if (!username || !email || !password) {
-            return res.status(400).json({
+app.post(
+    '/api/register',
+    [
+        body('username').notEmpty().withMessage('Username is required'),
+        body('email').isEmail().withMessage('Invalid email format'),
+        body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ success: false, errors: errors.array() });
+        }
+
+        try {
+            const { username, email, password } = req.body;
+
+            // Check if email already exists
+            const { rows: existingUsers } = await db.query(
+                'SELECT * FROM users WHERE email = $1',
+                [email]
+            );
+
+            if (existingUsers.length > 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Email already in use',
+                });
+            }
+
+            // Hash password
+            const hashedPassword = await bcrypt.hash(password, 10);
+
+            // Insert user into database
+            await db.query(
+                'INSERT INTO users (username, email, password) VALUES ($1, $2, $3)',
+                [username, email, hashedPassword]
+            );
+
+            res.status(201).json({
+                success: true,
+                message: 'User registered successfully',
+            });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({
                 success: false,
-                message: 'Username, email and password are required'
+                message: 'Error registering user',
             });
         }
-        
-        // Check if email already exists
-        const [existingUsers] = await db.query(
-            'SELECT * FROM users WHERE email = ?',
-            [email]
-        );
-        
-        if (existingUsers.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email already in use'
-            });
-        }
-        
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
-        
-        // Insert user into database
-        const [result] = await db.query(
-            'INSERT INTO users (username, email, password) VALUES (?, ?, ?)',
-            [username, email, hashedPassword]
-        );
-        
-        res.status(201).json({
-            success: true,
-            message: 'User registered successfully'
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            success: false,
-            message: 'Error registering user'
-        });
     }
-});
+);
 
 // Login endpoint
-app.post('/api/login', async (req, res) => {
-    try {
-        const { email, password } = req.body;
-        
-        if (!email || !password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Email and password are required'
-            });
+app.post(
+    '/api/login',
+    [
+        body('email').isEmail().withMessage('Invalid email format'),
+        body('password').notEmpty().withMessage('Password is required'),
+    ],
+    async (req, res) => {
+        const errors = validationResult(req);
+        if (!errors.isEmpty()) {
+            return res.status(400).json({ success: false, errors: errors.array() });
         }
-        
-        // Find user
-        const [users] = await db.query(
-            'SELECT * FROM users WHERE email = ?',
-            [email]
-        );
-        
-        if (users.length === 0) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
-        }
-        
-        const user = users[0];
-        
-        // Check password
-        const validPassword = await bcrypt.compare(password, user.password);
-        if (!validPassword) {
-            return res.status(401).json({
-                success: false,
-                message: 'Invalid credentials'
-            });
-        }
-        
-        // Generate JWT token
-        const token = jwt.sign(
-            { userId: user.id },
-            process.env.JWT_SECRET,
-            { expiresIn: '24h' }
-        );
-        
-        res.json({
-            success: true,
-            token,
-            user: {
-                id: user.id,
-                username: user.username,
-                email: user.email
+
+        try {
+            const { email, password } = req.body;
+
+            // Find user
+            const { rows: users } = await db.query(
+                'SELECT * FROM users WHERE email = $1',
+                [email]
+            );
+
+            if (users.length === 0) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid credentials',
+                });
             }
-        });
-    } catch (error) {
-        console.error(error);
-        res.status(500).json({
-            success: false,
-            message: 'Error logging in'
-        });
+
+            const user = users[0];
+
+            // Check password
+            const validPassword = await bcrypt.compare(password, user.password);
+            if (!validPassword) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'Invalid credentials',
+                });
+            }
+
+            // Generate JWT token
+            const token = jwt.sign(
+                { userId: user.id },
+                process.env.JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+
+            res.json({
+                success: true,
+                token,
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    email: user.email,
+                },
+            });
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({
+                success: false,
+                message: 'Error logging in',
+            });
+        }
     }
-});
+);
 
 // Use chat routes
 app.use('/api', chatRoutes);
