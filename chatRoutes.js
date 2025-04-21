@@ -109,14 +109,14 @@ router.get('/conversations', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     try {
-      const [conversations] = await db.query(
-        'SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = ? ORDER BY updated_at DESC',
+      const result = await db.query(
+        'SELECT id, title, created_at, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC',
         [userId]
       );
 
       res.json({
         success: true,
-        conversations
+        conversations: result.rows
       });
     } catch (dbError) {
       console.error('Database error fetching conversations:', dbError);
@@ -138,27 +138,27 @@ router.get('/conversations/:id', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     try {
-      const [conversations] = await db.query(
-        'SELECT * FROM conversations WHERE id = ? AND user_id = ?',
+      const result = await db.query(
+        'SELECT * FROM conversations WHERE id = $1 AND user_id = $2',
         [conversationId, userId]
       );
 
-      if (conversations.length === 0) {
+      if (result.rows.length === 0) {
         return res.status(404).json({
           success: false,
           message: 'Conversation not found'
         });
       }
 
-      const [messages] = await db.query(
-        'SELECT id, content, is_bot, created_at FROM messages WHERE conversation_id = ? ORDER BY created_at ASC',
+      const messagesResult = await db.query(
+        'SELECT id, content, is_bot, created_at FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
         [conversationId]
       );
 
       res.json({
         success: true,
-        conversation: conversations[0],
-        messages
+        conversation: result.rows[0],
+        messages: messagesResult.rows
       });
     } catch (dbError) {
       console.error('Database error fetching conversation or messages:', dbError);

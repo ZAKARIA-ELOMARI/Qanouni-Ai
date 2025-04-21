@@ -11,15 +11,29 @@ const pool = new Pool({
   },
 });
 
-// Test database connection
+// Handle pool errors
+pool.on('error', (err) => {
+  console.error('Unexpected error on idle client:', err.message);
+  process.exit(1); // Exit the application if a critical error occurs
+});
+
+// Test database connection with retry logic
 (async () => {
-  try {
-    const client = await pool.connect();
-    console.log('Database connected successfully');
-    client.release();
-  } catch (err) {
-    console.error('Error connecting to the database:', err.message);
-    process.exit(1);
+  const maxRetries = 5;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const client = await pool.connect();
+      console.log('Database connected successfully');
+      client.release();
+      break;
+    } catch (err) {
+      console.error(`Database connection failed (attempt ${attempt}):`, err.message);
+      if (attempt === maxRetries) {
+        console.error('Max retries reached. Exiting...');
+        process.exit(1);
+      }
+      await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds before retrying
+    }
   }
 })();
 

@@ -17,6 +17,13 @@ if (!process.env.OPENAI_API_KEY) {
     process.exit(1);
 }
 
+// Log Node.js version
+console.log(`Running on Node.js version: ${process.version}`);
+if (parseInt(process.versions.node.split('.')[0]) < 16) {
+    console.error('Node.js version 16 or higher is required. Please update your Node.js.');
+    process.exit(1);
+}
+
 // Test database connection
 (async () => {
     try {
