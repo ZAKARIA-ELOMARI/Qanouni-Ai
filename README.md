@@ -10,7 +10,12 @@
     <img src="https://img.shields.io/github/last-commit/ZAKARIA-ELOMARI/Qanouni-Ai?style=default&logo=git&logoColor=white&color=0080ff" alt="last-commit">
     <img src="https://img.shields.io/github/languages/top/ZAKARIA-ELOMARI/Qanouni-Ai?style=default&color=0080ff" alt="repo-top-language">
     <img src="https://img.shields.io/github/languages/count/ZAKARIA-ELOMARI/Qanouni-Ai?style=default&color=0080ff" alt="repo-language-count">
+    <img src="https://img.shields.io/github/contributors/ZAKARIA-ELOMARI/Qanouni-Ai?style=flat-square" alt="contributors">
+
+    [![Contributors]()](https://github.com/ZAKARIA-ELOMARI/Qanouni-Ai/graphs/contributors)
+
 </p>
+
 
 ## 🔗 Table of Contents
 
@@ -252,8 +257,13 @@ No automated tests are configured yet. You can manually test APIs with [Postman]
 5. **Push** and open a **PR** against `main`  
 6. **Discuss & review** until merged
 
-[![Contributors](https://img.shields.io/github/contributors/ZAKARIA-ELOMARI/Qanouni-Ai?style=flat-square)](https://github.com/ZAKARIA-ELOMARI/Qanouni-Ai/graphs/contributors)
+    
 
+<a href="https://github.com/ZAKARIA-ELOMARI/Qanouni-Ai/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ZAKARIA-ELOMARI/Qanouni-Ai" />
+</a>
+
+Made with [contrib.rocks](https://contrib.rocks).
 
 ---
 
