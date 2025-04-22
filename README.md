@@ -25,8 +25,6 @@
   - [🧪 Testing](#%F0%9F%A7%AA-testing)  
 - [🔰 Contributing](#-contributing)  
 - [🎗 License](#-license)  
-- [🙌 Acknowledgments](#-acknowledgments)
-
 ---
 
 ## 📍 Overview
