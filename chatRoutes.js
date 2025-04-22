@@ -310,12 +310,12 @@ router.delete('/conversations/:id', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
 
     try {
-      const [result] = await db.query(
-        'DELETE FROM conversations WHERE id = ? AND user_id = ?',
+      const result = await db.query(
+        'DELETE FROM conversations WHERE id = $1 AND user_id = $2 RETURNING id',
         [conversationId, userId]
       );
 
-      if (result.affectedRows === 0) {
+      if (result.rowCount === 0) {
         return res.status(404).json({
           success: false,
           message: 'Conversation not found'
