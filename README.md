@@ -89,7 +89,7 @@ Qanouni‑Ai/
 <details open>
   <summary><b>Qanouni‑Ai/</b></summary>
 
-  <details open>
+  <details>
     <summary><b>back‑end/</b></summary>
     <table>
       <tr>
@@ -119,7 +119,7 @@ Qanouni‑Ai/
     </table>
   </details>
 
-  <details open>
+  <details>
     <summary><b>front‑end/</b></summary>
     <table>
       <tr>
