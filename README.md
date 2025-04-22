@@ -11,10 +11,16 @@
     <img src="https://img.shields.io/github/languages/top/ZAKARIA-ELOMARI/Qanouni-Ai?style=default&color=0080ff" alt="repo-top-language">
     <img src="https://img.shields.io/github/languages/count/ZAKARIA-ELOMARI/Qanouni-Ai?style=default&color=0080ff" alt="repo-language-count">
     <img src="https://img.shields.io/github/contributors/ZAKARIA-ELOMARI/Qanouni-Ai?style=flat-square" alt="contributors">
-
-    [![Contributors]()](https://github.com/ZAKARIA-ELOMARI/Qanouni-Ai/graphs/contributors)
-
 </p>
+<p align="center">
+  <!-- JavaScript -->
+  <img alt="JavaScript" src="https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black" />
+  <!-- CSS -->
+  <img alt="CSS3" src="https://img.shields.io/badge/CSS3-1572B6?style=flat-square&logo=css3&logoColor=white" />
+  <!-- HTML5 -->
+  <img alt="HTML5" src="https://img.shields.io/badge/HTML5-E34F26?style=flat-square&logo=html5&logoColor=white" />
+</p>
+
 
 
 ## 🔗 Table of Contents
