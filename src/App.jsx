@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Chat from './pages/Chat';
+import NotFound from './pages/NotFound';
 import { ThemeProvider, createTheme } from '@mui/material';
 
 const theme = createTheme({
@@ -80,6 +81,7 @@ function App() {
                         }
                     />
                     <Route path="/" element={<Navigate to="/login" />} />
+                    <Route path="*" element={<NotFound />} />
                 </Routes>
             </Router>
         </ThemeProvider>

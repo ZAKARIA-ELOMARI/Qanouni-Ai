@@ -16,6 +16,7 @@ import {
     MenuItem,
     AppBar,
     Toolbar,
+    Stack,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -27,7 +28,197 @@ import MenuIcon from '@mui/icons-material/Menu';
 import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import api from '../config/api';
+import { keyframes } from '@mui/system';
+import CircularProgress from '@mui/material/CircularProgress';
+import ReactMarkdown from 'react-markdown';
+
+// Animation du pulse
+const pulse = keyframes`
+    0% { transform: scale(1); opacity: 0.4; }
+    50% { transform: scale(1.1); opacity: 0.7; }
+    100% { transform: scale(1); opacity: 0.4; }
+`;
+
+// Animation d'apparition des messages
+const fadeIn = keyframes`
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+`;
+
+// Composant d'animation de chargement professionnel
+const LoadingAnimation = () => {
+    return (
+        <Box
+            sx={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 2,
+                p: 2,
+                maxWidth: '70%',
+            }}
+        >
+            {/* Avatar du Bot */}
+            <Avatar
+                sx={{
+                    bgcolor: 'primary.main',
+                    width: 40,
+                    height: 40,
+                }}
+            >
+                <SmartToyIcon sx={{ fontSize: 24 }} />
+            </Avatar>
+
+            {/* Contenu du message de chargement */}
+            <Paper
+                elevation={0}
+                sx={{
+                    p: 2,
+                    bgcolor: 'background.paper',
+                    borderRadius: 2,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    position: 'relative',
+                    overflow: 'hidden',
+                    '&::after': {
+                        content: '""',
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        width: '100%',
+                        height: '2px',
+                        background: 'linear-gradient(90deg, transparent, primary.main, transparent)',
+                        animation: `${pulse} 1.5s infinite`,
+                    }
+                }}
+            >
+                <CircularProgress
+                    size={20}
+                    thickness={4}
+                    sx={{
+                        color: 'primary.main',
+                        opacity: 0.7
+                    }}
+                />
+                <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1
+                    }}
+                >
+                    Génération de la réponse
+                </Typography>
+            </Paper>
+        </Box>
+    );
+};
+
+// Styles pour les messages
+const messageStyles = {
+    botMessage: {
+        '& pre': {
+            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            padding: '1rem',
+            borderRadius: '8px',
+            overflowX: 'auto',
+            margin: '0.5rem 0',
+            border: '1px solid',
+            borderColor: 'divider',
+            fontSize: '0.9rem',
+        },
+        '& code': {
+            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+            padding: '2px 6px',
+            borderRadius: '4px',
+            fontSize: '0.9rem',
+            fontFamily: 'monospace',
+        },
+        '& h3': {
+            mt: 2,
+            mb: 1.5,
+            fontSize: '1.25rem',
+            fontWeight: 600,
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+            pb: 1,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            '&::before': {
+                content: '""',
+                width: '4px',
+                height: '1.25rem',
+                backgroundColor: 'primary.main',
+                borderRadius: '2px',
+                display: 'inline-block',
+            },
+        },
+        '& ul, & ol': {
+            pl: 3,
+            mb: 1.5,
+            '& li::marker': {
+                color: 'primary.main',
+            },
+        },
+        '& li': {
+            mb: 1,
+            pl: 1,
+        },
+        '& p': {
+            mb: 1.5,
+            lineHeight: 1.6,
+            '&:last-child': {
+                mb: 0,
+            },
+        },
+        '& strong': {
+            fontWeight: 600,
+            color: 'primary.main',
+            backgroundColor: 'rgba(0, 166, 126, 0.08)',
+            padding: '0.1rem 0.3rem',
+            borderRadius: '4px',
+        },
+        '& blockquote': {
+            borderLeft: '4px solid',
+            borderColor: 'primary.main',
+            ml: 0,
+            pl: 2,
+            py: 0.5,
+            backgroundColor: 'rgba(0, 166, 126, 0.08)',
+            borderRadius: '4px',
+        },
+    },
+    userMessage: {
+        '& strong': {
+            color: 'inherit',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        },
+        '& h3': {
+            borderColor: 'rgba(255, 255, 255, 0.2)',
+            '&::before': {
+                backgroundColor: 'white',
+            },
+        },
+        '& blockquote': {
+            borderColor: 'white',
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        },
+        '& li::marker': {
+            color: 'white',
+        },
+    },
+};
 
 const Chat = () => {
     const [message, setMessage] = useState('');
@@ -43,6 +234,32 @@ const Chat = () => {
     const [menuAnchorEl, setMenuAnchorEl] = useState(null);
     const [isEditingTitle, setIsEditingTitle] = useState(false);
     const [newTitle, setNewTitle] = useState('');
+    const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
+    const [currentSuggestionSet, setCurrentSuggestionSet] = useState(0);
+
+    const allSuggestions = [
+        // Set 1
+        [
+            "Comment créer une entreprise au Maroc ?",
+            "Quels sont mes droits en cas de licenciement ?",
+            "Comment légaliser un document administratif ?",
+            "Quelles sont les étapes d'un divorce au Maroc ?"
+        ],
+        // Set 2
+        [
+            "Quelles sont les conditions pour obtenir la nationalité marocaine ?",
+            "Comment déposer une plainte au Maroc ?",
+            "Quels sont les droits des locataires ?",
+            "Comment protéger une marque au Maroc ?"
+        ],
+        // Set 3
+        [
+            "Quelles sont les procédures d'héritage au Maroc ?",
+            "Comment créer une association ?",
+            "Quels sont les droits des femmes au travail ?",
+            "Comment obtenir un casier judiciaire ?"
+        ]
+    ];
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -66,6 +283,12 @@ const Chat = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    useEffect(() => {
+        if (!currentConversation) {
+            setCurrentSuggestionSet((prev) => (prev + 1) % allSuggestions.length);
+        }
+    }, [currentConversation]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -119,6 +342,44 @@ const Chat = () => {
         }
     };
 
+    const updateConversationTitle = async (conversationId, messageContent) => {
+        try {
+            // Créer un titre significatif à partir du message
+            let title = messageContent
+                .split('?')[0] // Prendre la première phrase jusqu'au point d'interrogation
+                .split('.')[0] // Ou jusqu'au point
+                .trim();
+
+            // Limiter la longueur du titre
+            title = title.length > 40 ? title.substring(0, 40) + '...' : title;
+
+            // Ajouter une icône appropriée en fonction du contenu
+            if (title.toLowerCase().includes('droit')) {
+                title = '⚖️ ' + title;
+            } else if (title.toLowerCase().includes('loi')) {
+                title = '📜 ' + title;
+            } else if (title.toLowerCase().includes('justice')) {
+                title = '🏛️ ' + title;
+            } else {
+                title = '💬 ' + title;
+            }
+
+            // Mettre à jour le titre dans la base de données
+            const response = await api.put(`/conversations/${conversationId}`, { title });
+
+            // Mettre à jour l'état local des conversations
+            setConversations(prevConversations => 
+                prevConversations.map(conv =>
+                    conv.id === conversationId
+                        ? { ...conv, title: response.data.title || title }
+                        : conv
+                )
+            );
+        } catch (error) {
+            console.error('Error updating conversation title:', error);
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!message.trim()) return;
@@ -130,19 +391,37 @@ const Chat = () => {
 
         try {
             let conversationId = currentConversation;
+            let isNewConversation = false;
+
             if (!conversationId) {
-                const newConversation = await api.post('/conversations', { title: 'Nouvelle conversation' });
+                // Créer une nouvelle conversation avec le message comme titre
+                const title = message.length > 40 ? message.substring(0, 40) + '...' : message;
+                const newConversation = await api.post('/conversations', {
+                    title: title
+                });
                 conversationId = newConversation.data.conversation.id;
                 setCurrentConversation(conversationId);
-                setConversations([newConversation.data.conversation, ...conversations]);
+                setConversations(prev => [{
+                    ...newConversation.data.conversation,
+                    title: title
+                }, ...prev]);
+                isNewConversation = true;
             }
 
+            // Envoyer le message
             const response = await api.post(`/conversations/${conversationId}/messages`, {
                 message,
                 useFileAssistant: true,
             });
 
-            setMessages([...messages, newMessage, { content: response.data.message.content, is_bot: true }]);
+            // Mettre à jour les messages
+            setMessages(prev => [...prev, { content: response.data.message.content, is_bot: true }]);
+
+            // Si c'est une nouvelle conversation, on a déjà défini le titre avec le premier message
+            if (!isNewConversation) {
+                // Pour les conversations existantes, on peut mettre à jour le titre si nécessaire
+                await updateConversationTitle(conversationId, message);
+            }
         } catch (error) {
             console.error('Error sending message:', error);
         } finally {
@@ -151,13 +430,27 @@ const Chat = () => {
     };
 
     const formatDate = (dateString) => {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('fr-FR', {
-            day: 'numeric',
-            month: 'short',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+        if (!dateString) return 'À l\'instant';
+        
+        try {
+            const date = new Date(dateString);
+            
+            // Vérifier si la date est valide
+            if (isNaN(date.getTime())) {
+                return 'À l\'instant';
+            }
+
+            return new Intl.DateTimeFormat('fr-FR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            }).format(date);
+        } catch (error) {
+            console.error('Error formatting date:', error);
+            return 'À l\'instant';
+        }
     };
 
     const handleMenuOpen = (event) => {
@@ -193,6 +486,244 @@ const Chat = () => {
     const toggleSidebar = () => {
         setIsSidebarOpen(!isSidebarOpen);
     };
+
+    const handleSuggestionClick = (question) => {
+        setMessage(question);
+    };
+
+    // Fonction pour afficher les messages avec l'avatar
+    const renderMessage = (msg, index) => {
+        const isArabic = /[\u0600-\u06FF]/.test(msg.content);
+        const isLastMessage = index === messages.length - 1;
+        
+        return (
+            <Box
+                key={index}
+                sx={{
+                    display: 'flex',
+                    flexDirection: msg.is_bot ? 'row' : 'row-reverse',
+                    alignItems: 'flex-start',
+                    gap: 2,
+                    mb: 3,
+                    animation: isLastMessage ? `${fadeIn} 0.3s ease-out` : 'none',
+                }}
+            >
+                <Box sx={{ position: 'relative' }}>
+                    <Avatar
+                        sx={{
+                            bgcolor: msg.is_bot ? 'primary.main' : 'secondary.main',
+                            width: 40,
+                            height: 40,
+                            boxShadow: 2,
+                        }}
+                    >
+                        {msg.is_bot ? <SmartToyIcon /> : user?.username?.charAt(0).toUpperCase() || <PersonIcon />}
+                    </Avatar>
+                    {msg.is_bot && (
+                        <Typography
+                            variant="caption"
+                            sx={{
+                                position: 'absolute',
+                                top: '100%',
+                                left: '50%',
+                                transform: 'translateX(-50%)',
+                                mt: 0.5,
+                                color: 'text.secondary',
+                                fontSize: '0.75rem',
+                                whiteSpace: 'nowrap',
+                            }}
+                        >
+                            Assistant
+                        </Typography>
+                    )}
+                </Box>
+
+                <Paper
+                    elevation={0}
+                    sx={{
+                        p: 2.5,
+                        maxWidth: '70%',
+                        bgcolor: msg.is_bot ? 'background.paper' : 'primary.main',
+                        color: msg.is_bot ? 'text.primary' : 'white',
+                        borderRadius: '12px',
+                        boxShadow: msg.is_bot ? 
+                            '0 2px 4px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.1)' : 
+                            '0 2px 4px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
+                        position: 'relative',
+                        '&::before': {
+                            content: '""',
+                            position: 'absolute',
+                            top: 16,
+                            [msg.is_bot ? 'left' : 'right']: -6,
+                            width: 12,
+                            height: 12,
+                            bgcolor: msg.is_bot ? 'background.paper' : 'primary.main',
+                            transform: 'rotate(45deg)',
+                            boxShadow: msg.is_bot ?
+                                '-1px 1px 2px rgba(0,0,0,0.05)' :
+                                '1px -1px 2px rgba(0,0,0,0.1)',
+                        },
+                        direction: isArabic ? 'rtl' : 'ltr',
+                        textAlign: isArabic ? 'right' : 'left',
+                        fontFamily: isArabic ? 
+                            "'Noto Sans Arabic', 'Segoe UI', sans-serif" : 
+                            "'Segoe UI', sans-serif",
+                        ...messageStyles.botMessage,
+                        ...(msg.is_bot ? {} : messageStyles.userMessage),
+                    }}
+                >
+                    <ReactMarkdown
+                        components={{
+                            h3: ({node, ...props}) => (
+                                <Typography variant="h3" component="h3" {...props} />
+                            ),
+                            p: ({node, ...props}) => (
+                                <Typography 
+                                    variant="body1" 
+                                    sx={{ fontSize: '0.95rem' }} 
+                                    {...props} 
+                                />
+                            ),
+                            li: ({node, ...props}) => (
+                                <Typography 
+                                    component="li" 
+                                    variant="body1" 
+                                    sx={{ fontSize: '0.95rem' }} 
+                                    {...props} 
+                                />
+                            ),
+                            text: ({node, ...props}) => {
+                                if (props.children === '0') return null;
+                                return <span {...props} />;
+                            }
+                        }}
+                    >
+                        {msg.content}
+                    </ReactMarkdown>
+                </Paper>
+            </Box>
+        );
+    };
+
+    const SuggestedQuestions = () => (
+        <Box
+            sx={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                p: { xs: 2, sm: 4 },
+                height: '100%',
+                maxWidth: '900px',
+                margin: '0 auto',
+            }}
+        >
+            <Box sx={{ textAlign: 'center', mb: 4 }}>
+                <Avatar
+                    sx={{
+                        bgcolor: 'primary.main',
+                        width: 56,
+                        height: 56,
+                        mb: 2,
+                        mx: 'auto',
+                        boxShadow: 2,
+                    }}
+                >
+                    <SmartToyIcon sx={{ fontSize: 32 }} />
+                </Avatar>
+                <Typography 
+                    variant="h5" 
+                    sx={{ 
+                        color: 'primary.main', 
+                        fontWeight: 600,
+                        mb: 1.5
+                    }}
+                >
+                    Votre Assistant Juridique Marocain
+                </Typography>
+                <Typography
+                    variant="body1"
+                    sx={{
+                        color: 'text.secondary',
+                        mb: 4,
+                        maxWidth: '600px',
+                        mx: 'auto',
+                        lineHeight: 1.6
+                    }}
+                >
+                    Je suis là pour répondre à vos questions sur le droit marocain et vous aider dans vos démarches juridiques.
+                </Typography>
+                <Typography 
+                    variant="subtitle1" 
+                    sx={{ 
+                        color: 'text.primary',
+                        fontWeight: 500,
+                        mb: 2
+                    }}
+                >
+                    Commencez avec une de ces questions :
+                </Typography>
+            </Box>
+
+            <Box
+                sx={{
+                    display: 'grid',
+                    gridTemplateColumns: {
+                        xs: '1fr',
+                        sm: 'repeat(2, 1fr)'
+                    },
+                    gap: 2,
+                    width: '100%',
+                }}
+            >
+                {allSuggestions[currentSuggestionSet].map((question, index) => (
+                    <Paper
+                        key={index}
+                        elevation={0}
+                        onClick={() => handleSuggestionClick(question)}
+                        sx={{
+                            p: 2,
+                            borderRadius: 2,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            bgcolor: 'background.paper',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                            minHeight: '80px',
+                            '&:hover': {
+                                borderColor: 'primary.main',
+                                bgcolor: 'primary.50',
+                                transform: 'translateY(-2px)',
+                                boxShadow: 1,
+                            },
+                        }}
+                    >
+                        <LightbulbOutlinedIcon 
+                            sx={{ 
+                                color: 'primary.main',
+                                fontSize: 20,
+                                mt: 0.3,
+                                flexShrink: 0
+                            }}
+                        />
+                        <Typography
+                            variant="body2"
+                            sx={{
+                                color: 'text.primary',
+                                fontSize: '0.875rem',
+                                lineHeight: 1.4,
+                            }}
+                        >
+                            {question}
+                        </Typography>
+                    </Paper>
+                ))}
+            </Box>
+        </Box>
+    );
 
     return (
         <Box sx={{ height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default' }}>
@@ -308,7 +839,10 @@ const Chat = () => {
                             fullWidth
                             variant="contained"
                             startIcon={<AddIcon />}
-                            onClick={startNewConversation}
+                            onClick={() => {
+                                setCurrentConversation(null);
+                                setMessages([]);
+                            }}
                             sx={{
                                 justifyContent: 'flex-start',
                                 mb: 1,
@@ -327,17 +861,35 @@ const Chat = () => {
                                     key={conv.id}
                                     button
                                     selected={currentConversation === conv.id}
-                                    onClick={() => setCurrentConversation(conv.id)}
+                                    onClick={() => {
+                                        setCurrentConversation(conv.id);
+                                        fetchMessages(conv.id);
+                                    }}
                                     sx={{
                                         mb: 0.5,
                                         borderRadius: 1,
                                         mx: 1,
-                                        '&.Mui-selected': {
-                                            backgroundColor: 'rgba(0, 166, 126, 0.1)',
-                                            '&:hover': {
-                                                backgroundColor: 'rgba(0, 166, 126, 0.2)',
-                                            },
+                                        transition: 'all 0.2s ease',
+                                        position: 'relative',
+                                        pl: currentConversation === conv.id ? 3 : 2,
+                                        backgroundColor: currentConversation === conv.id ? 
+                                            'rgba(0, 166, 126, 0.15)' : 
+                                            'transparent',
+                                        borderLeft: currentConversation === conv.id ? 
+                                            '4px solid' : 
+                                            '4px solid transparent',
+                                        borderColor: currentConversation === conv.id ? 
+                                            'primary.main' : 
+                                            'transparent',
+                                        '&:hover': {
+                                            backgroundColor: currentConversation === conv.id ? 
+                                                'rgba(0, 166, 126, 0.2)' : 
+                                                'rgba(0, 166, 126, 0.1)',
                                         },
+                                        cursor: 'default',
+                                        '& .MuiListItemText-root': {
+                                            cursor: 'default'
+                                        }
                                     }}
                                     secondaryAction={
                                         <IconButton 
@@ -359,13 +911,17 @@ const Chat = () => {
                                         </IconButton>
                                     }
                                 >
-                                    <ChatIcon sx={{ mr: 2, color: 'text.secondary' }} />
+                                    <ChatIcon sx={{ 
+                                        mr: 2, 
+                                        color: 'text.secondary',
+                                    }} />
                                     <ListItemText 
                                         primary={conv.title}
                                         secondary={formatDate(conv.updated_at)}
                                         primaryTypographyProps={{
                                             noWrap: true,
-                                            color: 'text.primary'
+                                            color: 'text.primary',
+                                            fontWeight: currentConversation === conv.id ? 500 : 400
                                         }}
                                         secondaryTypographyProps={{
                                             noWrap: true,
@@ -444,47 +1000,14 @@ const Chat = () => {
                         p: 3,
                         display: 'flex',
                         flexDirection: 'column',
-                        gap: 2
                     }}>
                         {messages.length === 0 ? (
-                            <Box sx={{
-                                display: 'flex',
-                                flexDirection: 'column',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                height: '100%',
-                                color: 'text.secondary'
-                            }}>
-                                <ChatIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
-                                <Typography variant="h6">
-                                    Commencez une nouvelle conversation
-                                </Typography>
-                                <Typography>
-                                    Posez votre question juridique...
-                                </Typography>
-                            </Box>
+                            <SuggestedQuestions />
                         ) : (
-                            messages.map((msg, index) => (
-                                <Box
-                                    key={index}
-                                    sx={{
-                                        display: 'flex',
-                                        justifyContent: msg.is_bot ? 'flex-start' : 'flex-end',
-                                    }}
-                                >
-                                    <Paper
-                                        sx={{
-                                            p: 2,
-                                            maxWidth: '70%',
-                                            bgcolor: msg.is_bot ? 'background.paper' : 'primary.main',
-                                            color: msg.is_bot ? 'text.primary' : 'white',
-                                            borderRadius: 2,
-                                        }}
-                                    >
-                                        <Typography>{msg.content}</Typography>
-                                    </Paper>
-                                </Box>
-                            ))
+                            <>
+                                {messages.map((msg, index) => renderMessage(msg, index))}
+                                {loading && <LoadingAnimation />}
+                            </>
                         )}
                         <div ref={messagesEndRef} />
                     </Box>
@@ -506,13 +1029,32 @@ const Chat = () => {
                                 <TextField
                                     fullWidth
                                     variant="outlined"
-                                    placeholder="Tapez votre message..."
+                                    placeholder={loading ? "Génération en cours..." : "Posez votre question juridique..."}
                                     value={message}
                                     onChange={(e) => setMessage(e.target.value)}
                                     disabled={loading}
+                                    autoComplete="off"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                            e.preventDefault();
+                                            if (message.trim() && !loading) {
+                                                handleSubmit(e);
+                                            }
+                                        }
+                                    }}
+                                    inputProps={{
+                                        autoComplete: 'off',
+                                        form: {
+                                            autoComplete: 'off',
+                                        },
+                                    }}
                                     sx={{
                                         '& .MuiOutlinedInput-root': {
                                             borderRadius: 2,
+                                            transition: 'all 0.3s ease',
+                                            ...(loading && {
+                                                opacity: 0.7,
+                                            })
                                         }
                                     }}
                                 />
@@ -523,7 +1065,15 @@ const Chat = () => {
                                     sx={{ 
                                         minWidth: '50px',
                                         height: '56px',
-                                        borderRadius: 2
+                                        borderRadius: 2,
+                                        transition: 'all 0.3s ease',
+                                        ...(loading && {
+                                            opacity: 0.7,
+                                        }),
+                                        '&:not(:disabled):hover': {
+                                            transform: 'translateY(-1px)',
+                                            boxShadow: 2,
+                                        }
                                     }}
                                 >
                                     <SendIcon />
@@ -533,6 +1083,12 @@ const Chat = () => {
                     </Box>
                 </Box>
             </Box>
+
+            {/* Ajout des polices pour l'arabe dans le head */}
+            <link
+                rel="stylesheet"
+                href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600&display=swap"
+            />
         </Box>
     );
 };
