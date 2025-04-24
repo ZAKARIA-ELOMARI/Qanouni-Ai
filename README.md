@@ -1,7 +1,6 @@
 <p align="center">
-    <img src="https://raw.githubusercontent.com/PKief/vscode-material-icon-theme/ec559a9f6bfd399b82bb44393651661b08aaf7ba/icons/folder-markdown-open.svg" align="center" width="30%">
+    <img src="https://github.com/ZAKARIA-ELOMARI/Qanouni-Ai/blob/6a7776fbec7fe94e7c4d53a86bf5d42a8ee570b4/logo.jpg" align="center" width="30%">
 </p>
-<p align="center"><h1 align="center">QANOUNI‑AI</h1></p>
 <p align="center">
     <em><code>An AI‑powered legal assistant for asking and retrieving law references.</code></em>
 </p>
