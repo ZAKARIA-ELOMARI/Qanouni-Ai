@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('./db');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 const OpenAI = require('openai');
 
 // Setup OpenAI configuration
@@ -335,6 +336,145 @@ router.delete('/conversations/:id', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error deleting conversation'
+    });
+  }
+});
+
+// Get user profile
+router.get('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    try {
+      const result = await db.query(
+        'SELECT id, username, email, created_at, request_count FROM users WHERE id = $1',
+        [userId]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        profile: result.rows[0]
+      });
+    } catch (dbError) {
+      console.error('Database error fetching user profile:', dbError);
+      throw new Error('Database error');
+    }
+  } catch (error) {
+    console.error('Error fetching user profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching user profile'
+    });
+  }
+});
+
+// Update user profile
+router.put('/profile', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { username, email, password } = req.body;
+
+    // Validate that at least one field is provided
+    if (!username && !email && !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'At least one field (username, email, or password) must be provided'
+      });
+    }
+
+    try {
+      // Check if user exists
+      const userResult = await db.query('SELECT * FROM users WHERE id = $1', [userId]);
+      if (userResult.rows.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'User not found'
+        });
+      }
+
+      const updates = [];
+      const values = [];
+      let valueIndex = 1;
+
+      // Check for username conflicts
+      if (username) {
+        const usernameCheck = await db.query(
+          'SELECT id FROM users WHERE username = $1 AND id != $2',
+          [username, userId]
+        );
+        if (usernameCheck.rows.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message: 'Username already exists'
+          });
+        }
+        updates.push(`username = $${valueIndex++}`);
+        values.push(username);
+      }
+
+      // Check for email conflicts
+      if (email) {
+        const emailCheck = await db.query(
+          'SELECT id FROM users WHERE email = $1 AND id != $2',
+          [email, userId]
+        );
+        if (emailCheck.rows.length > 0) {
+          return res.status(409).json({
+            success: false,
+            message: 'Email already exists'
+          });
+        }
+        updates.push(`email = $${valueIndex++}`);
+        values.push(email);
+      }
+
+      // Hash password if provided
+      if (password) {
+        if (password.length < 6) {
+          return res.status(400).json({
+            success: false,
+            message: 'Password must be at least 6 characters long'
+          });
+        }
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updates.push(`password = $${valueIndex++}`);
+        values.push(hashedPassword);
+      }
+
+      // Add user ID for WHERE clause
+      values.push(userId);
+
+      // Execute update query
+      const updateQuery = `
+        UPDATE users 
+        SET ${updates.join(', ')} 
+        WHERE id = $${valueIndex}
+        RETURNING id, username, email, created_at, request_count
+      `;
+
+      const result = await db.query(updateQuery, values);
+
+      res.json({
+        success: true,
+        message: 'Profile updated successfully',
+        profile: result.rows[0]
+      });
+    } catch (dbError) {
+      console.error('Database error updating user profile:', dbError);
+      throw new Error('Database error');
+    }
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error updating user profile'
     });
   }
 });
