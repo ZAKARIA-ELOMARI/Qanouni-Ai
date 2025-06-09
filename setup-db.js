@@ -10,9 +10,7 @@ async function setupDatabase() {
   try {
     const client = await pool.connect();
 
-    console.log('PostgreSQL connected successfully');
-
-    // Create users table
+    console.log('PostgreSQL connected successfully');    // Create users table
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -20,7 +18,8 @@ async function setupDatabase() {
         email VARCHAR(100) UNIQUE NOT NULL,
         password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        request_count INT DEFAULT 0
+        request_count INT DEFAULT 0,
+        vector_store_id VARCHAR(255) DEFAULT NULL
       )
     `);
     console.log('Users table created or already exists');
@@ -36,9 +35,7 @@ async function setupDatabase() {
         FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
       )
     `);
-    console.log('Conversations table created or already exists');
-
-    // Create messages table
+    console.log('Conversations table created or already exists');    // Create messages table
     await client.query(`
       CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
@@ -50,6 +47,21 @@ async function setupDatabase() {
       )
     `);
     console.log('Messages table created or already exists');
+
+    // Create user_files table to track uploaded files
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_files (
+        id SERIAL PRIMARY KEY,
+        user_id INT NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        original_name VARCHAR(255) NOT NULL,
+        openai_file_id VARCHAR(255) NOT NULL,
+        file_size BIGINT NOT NULL,
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `);
+    console.log('User files table created or already exists');
 
     console.log('Database setup completed successfully');
     client.release();

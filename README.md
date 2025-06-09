@@ -58,5 +58,17 @@ This is a chatbot application built with Node.js, Express, MySQL, and OpenAI's A
 - `POST /api/conversations/:id/messages` - Send a message and get an AI response.
 - `DELETE /api/conversations/:id` - Delete a conversation.
 
+### File Upload & File-Assisted Messaging (NEW)
+- `POST /api/files/upload` - Upload PDF files and create a temporary vector store session.
+- `POST /api/files/ask` - Send a message to the AI assistant with access to uploaded files.
+- `GET /api/files/session` - Get information about the current file session.
+- `DELETE /api/files/session` - Clean up file session and remove all uploaded files.
+
+### User Profile
+- `GET /api/profile` - Get user profile information.
+- `PUT /api/profile` - Update user profile (username, email, password).
+
+For detailed information about the file upload and file-assisted messaging endpoints, see [FILE_UPLOAD_API.md](./FILE_UPLOAD_API.md).
+
 ## License
 This project is licensed under the ISC License.

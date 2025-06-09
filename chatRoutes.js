@@ -4,14 +4,43 @@ const db = require('./db');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const OpenAI = require('openai');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+
+// Setup multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    // Preserve file extension when saving to disk
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + Date.now() + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
+    }
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB limit
+  }
+});
 
 // Setup OpenAI configuration
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Vector Store ID for file search
-const VECTOR_STORE_ID = process.env.VECTOR_STORE_ID || "vs_67f12107a7d8819183387bcc311fda83";
+// Vector Store ID for file search (master law corpus)
+const MASTER_STORE_ID = process.env.VECTOR_STORE_ID || "vs_67f58b921f5c8191b7d30a1953f44f91";
 
 // Keep track of assistant and thread IDs for each user
 const userAssistants = {};
@@ -23,10 +52,9 @@ async function getOrCreateFileAssistant(userId) {
     const assistant = await openai.beta.assistants.create({
       name: "File Query Assistant",
       instructions: "Réponds aux questions en te basant sur le contenu du fichier enregistré. À la fin, spécifie le numéro du titre de loi ainsi que le numéro de l'article.",
-      tools: [{"type": "file_search"}],
-      tool_resources: {
+      tools: [{"type": "file_search"}],      tool_resources: {
         file_search: {
-          vector_store_ids: [VECTOR_STORE_ID]
+          vector_store_ids: [MASTER_STORE_ID]
         }
       },
       model: "gpt-4o-mini"
@@ -39,6 +67,102 @@ async function getOrCreateFileAssistant(userId) {
       assistantId: assistant.id,
       threadId: thread.id
     };
+  }
+  
+  return userAssistants[userId];
+}
+
+// Create or get user's permanent vector store
+async function getOrCreateUserVectorStore(userId, username) {
+  try {
+    // Check if user already has a vector store
+    const userResult = await db.query('SELECT vector_store_id FROM users WHERE id = $1', [userId]);
+    
+    if (userResult.rows.length === 0) {
+      throw new Error('User not found');
+    }
+    
+    let vectorStoreId = userResult.rows[0].vector_store_id;
+    
+    // If user doesn't have a vector store, create one
+    if (!vectorStoreId) {
+      const userStore = await openai.vectorStores.create({
+        name: `${username}_permanent_files`,
+        // No expiration - permanent storage
+      });
+      
+      vectorStoreId = userStore.id;
+      
+      // Copy master corpus files to user's vector store
+      try {
+        // Get files from master store
+        const masterFiles = await openai.vectorStores.files.list(MASTER_STORE_ID);
+        console.log(`Found ${masterFiles.data.length} files in master store to copy to user ${username}`);
+        
+        // Add master files to user's vector store (this creates references, not duplicates)
+        if (masterFiles.data.length > 0) {
+          const fileIds = masterFiles.data.map(f => f.id);
+          await openai.vectorStores.fileBatches.createAndPoll(vectorStoreId, {
+            file_ids: fileIds
+          });
+          console.log(`Added ${fileIds.length} master files to user ${username}'s vector store`);
+        }
+      } catch (copyError) {
+        console.error('Error copying master files to user store:', copyError);
+        // Continue anyway - user can still upload their own files
+      }
+      
+      // Save vector store ID to database
+      await db.query(
+        'UPDATE users SET vector_store_id = $1 WHERE id = $2',
+        [vectorStoreId, userId]
+      );
+      
+      console.log(`Created permanent vector store for user ${username}:`, vectorStoreId);
+    }
+    
+    return vectorStoreId;
+  } catch (error) {
+    console.error('Error creating/getting user vector store:', error);
+    throw error;
+  }
+}
+
+// Create file assistant that uses user's vector store (contains both master and user files)
+async function getOrCreateFileAssistant(userId, username) {
+  if (!userAssistants[userId]) {
+    // Get user's vector store
+    const userVectorStoreId = await getOrCreateUserVectorStore(userId, username);
+    
+    // Create an Assistant that uses the user's vector store
+    const assistant = await openai.beta.assistants.create({
+      name: `File-Assistant-${username}`,
+      instructions: (
+        "You are a legal assistant that can access both the master Moroccan law corpus and the user's uploaded documents. " +
+        "When answering questions, prioritize information from the user's documents when relevant, " +
+        "but also consult the master law corpus for comprehensive legal context. " +
+        "Always cite your sources and specify whether information comes from user documents or the law corpus. " +
+        "Respond in French and provide article numbers and law titles when applicable."
+      ),
+      tools: [{"type": "file_search"}],
+      tool_resources: {
+        file_search: {
+          vector_store_ids: [userVectorStoreId] // Only user store
+        }
+      },
+      model: "gpt-4o-mini"
+    });
+    
+    // Create a thread for this user
+    const thread = await openai.beta.threads.create();
+    
+    userAssistants[userId] = {
+      assistantId: assistant.id,
+      threadId: thread.id,
+      userVectorStoreId: userVectorStoreId
+    };
+    
+    console.log(`Created file assistant for user ${username} with user vector store: ${userVectorStoreId}`);
   }
   
   return userAssistants[userId];
@@ -475,6 +599,363 @@ router.put('/profile', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error updating user profile'
+    });
+  }
+});
+
+// Upload files and create file session endpoint
+router.post('/files/upload', authenticateToken, upload.array('files', 5), async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get user info
+    const userResult = await db.query('SELECT username FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    const username = userResult.rows[0].username;
+
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'No files uploaded' });
+    }
+
+    // Get or create user's permanent vector store
+    const userVectorStoreId = await getOrCreateUserVectorStore(userId, username);
+    
+    // Upload PDF files to the user's permanent vector store
+    const uploadedFiles = [];
+    const openaiFiles = [];
+    
+    for (const file of req.files) {
+      if (file.mimetype === 'application/pdf') {
+        // Upload each file to OpenAI first
+        const fileStream = fs.createReadStream(file.path);
+        const openaiFile = await openai.files.create({
+          file: fileStream,
+          purpose: "assistants"
+        });
+        
+        openaiFiles.push(openaiFile);
+        uploadedFiles.push({
+          originalName: file.originalname,
+          path: file.path,
+          size: file.size,
+          openaiFileId: openaiFile.id
+        });
+      }
+    }
+
+    if (openaiFiles.length === 0) {
+      return res.status(400).json({ success: false, message: 'No valid PDF files found' });
+    }
+
+    // Upload and poll file batch to user's vector store using file IDs
+    const fileBatch = await openai.vectorStores.fileBatches.createAndPoll(
+      userVectorStoreId,
+      {
+        file_ids: openaiFiles.map(f => f.id)
+      }
+    );
+
+    // Store file info in database
+    for (const fileInfo of uploadedFiles) {
+      await db.query(
+        'INSERT INTO user_files (user_id, filename, original_name, openai_file_id, file_size) VALUES ($1, $2, $3, $4, $5)',
+        [userId, fileInfo.path, fileInfo.originalName, fileInfo.openaiFileId, fileInfo.size]
+      );
+    }
+
+    // Clean up temporary files from disk
+    for (const file of req.files) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch (err) {
+        console.error('Error deleting temp file:', err);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Files uploaded successfully',
+      vectorStoreId: userVectorStoreId,
+      filesIndexed: fileBatch.file_counts,
+      uploadedFiles: uploadedFiles.map(f => ({
+        name: f.originalName,
+        size: f.size
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error uploading files:', error);
+    
+    // Clean up temporary files in case of error
+    if (req.files) {
+      for (const file of req.files) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch (err) {
+          console.error('Error deleting temp file after error:', err);
+        }
+      }
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: 'Error uploading files'
+    });
+  }
+});
+
+// File-assisted messaging endpoint (using permanent vector stores)
+router.post('/files/ask', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { message } = req.body;
+
+    if (!message) {
+      return res.status(400).json({
+        success: false,
+        message: 'Message content is required'
+      });
+    }
+
+    // Get user info
+    const userResult = await db.query('SELECT username, vector_store_id FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const { username, vector_store_id } = userResult.rows[0];
+    
+    // Check if user has any files (either vector store or uploaded files)
+    if (!vector_store_id) {
+      const filesResult = await db.query('SELECT COUNT(*) as count FROM user_files WHERE user_id = $1', [userId]);
+      if (filesResult.rows[0].count == 0) {
+        return res.status(404).json({
+          success: false,
+          message: 'No files found. Please upload files first.'
+        });
+      }
+    }
+    
+    try {
+      // Get or create file assistant (with both master corpus and user files)
+      const assistantSession = await getOrCreateFileAssistant(userId, username);
+      
+      // Add user message to thread
+      await retryOpenAICall(() =>
+        openai.beta.threads.messages.create(assistantSession.threadId, {
+          role: "user",
+          content: message
+        })
+      );
+
+      // Create run
+      const run = await retryOpenAICall(() =>
+        openai.beta.threads.runs.create(assistantSession.threadId, {
+          assistant_id: assistantSession.assistantId
+        })
+      );
+      
+      // Poll run status until completion
+      let runStatus;
+      do {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        runStatus = await retryOpenAICall(() =>
+          openai.beta.threads.runs.retrieve(assistantSession.threadId, run.id)
+        );
+      } while (runStatus.status !== 'completed' && runStatus.status !== 'failed');
+
+      if (runStatus.status === 'failed') {
+        throw new Error('Assistant run failed');
+      }
+
+      // Get the latest assistant message
+      const messages = await retryOpenAICall(() =>
+        openai.beta.threads.messages.list(assistantSession.threadId, { limit: 1 })
+      );
+
+      const latestMessage = messages.data[0];
+      const aiResponse = latestMessage && latestMessage.role === 'assistant'
+        ? latestMessage.content[0].text.value
+        : "No response from the file assistant.";
+
+      res.json({
+        success: true,
+        response: aiResponse,
+        vectorStoreId: assistantSession.userVectorStoreId
+      });
+
+    } catch (error) {
+      console.error('Error in file-assisted messaging:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Error processing your request with the file assistant'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error in file-assisted messaging:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error processing message'
+    });
+  }
+});
+
+// Get user files info (permanent storage)
+router.get('/files/session', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get user info including vector store
+    const userResult = await db.query(
+      'SELECT username, vector_store_id FROM users WHERE id = $1', 
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const { username, vector_store_id } = userResult.rows[0];
+
+    // Get user's uploaded files
+    const filesResult = await db.query(
+      'SELECT original_name, file_size, uploaded_at FROM user_files WHERE user_id = $1 ORDER BY uploaded_at DESC',
+      [userId]
+    );
+
+    if (filesResult.rows.length === 0 && !vector_store_id) {
+      return res.status(404).json({
+        success: false,
+        message: 'No files found'
+      });
+    }
+
+    res.json({
+      success: true,
+      session: {
+        vectorStoreId: vector_store_id,
+        username: username,
+        hasFiles: filesResult.rows.length > 0 || !!vector_store_id,
+        uploadedFiles: filesResult.rows.map(f => ({
+          name: f.original_name,
+          size: f.file_size,
+          uploadedAt: f.uploaded_at
+        }))
+      }
+    });
+
+  } catch (error) {
+    console.error('Error getting files info:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error retrieving files information'
+    });
+  }
+});
+
+// Clear user files (permanent storage)
+router.delete('/files/session', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    // Get user info including vector store
+    const userResult = await db.query(
+      'SELECT username, vector_store_id FROM users WHERE id = $1', 
+      [userId]
+    );
+    
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const { username, vector_store_id } = userResult.rows[0];
+
+    if (!vector_store_id) {
+      return res.status(404).json({
+        success: false,
+        message: 'No files to clear'
+      });
+    }
+
+    try {
+      // Get user's files from database
+      const filesResult = await db.query(
+        'SELECT openai_file_id FROM user_files WHERE user_id = $1',
+        [userId]
+      );
+
+      // Clean up OpenAI files and vector store
+      if (vector_store_id) {
+        // List files in vector store
+        const refs = await openai.vectorStores.files.list(vector_store_id);
+        console.log("Vector-store refs for user", username, ":", refs.data.map(r => r.id));
+
+        // Remove files from vector store
+        for (const ref of refs.data) {
+          const fid = ref.id;
+          // Detach the file from the vector-store (removes the embedding index)
+          await openai.vectorStores.files.del(vector_store_id, fid);
+          // Delete the underlying File object (frees storage & billing)
+          await openai.files.del(fid);
+        }
+
+        // Delete the vector store itself
+        await openai.vectorStores.del(vector_store_id);
+      }
+
+      // Clean up user's assistant if it exists
+      if (userAssistants[userId]) {
+        await openai.beta.assistants.del(userAssistants[userId].assistantId);
+        delete userAssistants[userId];
+      }
+
+      // Remove files from database
+      await db.query('DELETE FROM user_files WHERE user_id = $1', [userId]);
+      
+      // Clear vector store ID from user record
+      await db.query('UPDATE users SET vector_store_id = NULL WHERE id = $1', [userId]);
+
+      console.log("✔️ All files and vector store fully removed for user:", username);
+
+      res.json({
+        success: true,
+        message: 'All files cleared successfully'
+      });
+
+    } catch (cleanupError) {
+      console.error('Error during cleanup:', cleanupError);
+      
+      // Still clean up database even if OpenAI cleanup fails
+      await db.query('DELETE FROM user_files WHERE user_id = $1', [userId]);
+      await db.query('UPDATE users SET vector_store_id = NULL WHERE id = $1', [userId]);
+      
+      if (userAssistants[userId]) {
+        delete userAssistants[userId];
+      }
+      
+      res.json({
+        success: true,
+        message: 'Files removed from database, but some OpenAI resources may not have been cleaned up'
+      });
+    }
+
+  } catch (error) {
+    console.error('Error clearing user files:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error clearing files'
     });
   }
 });
