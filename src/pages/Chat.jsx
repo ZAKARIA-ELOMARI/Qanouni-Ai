@@ -29,6 +29,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
+import FolderIcon from '@mui/icons-material/Folder';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import api from '../config/api';
 import { keyframes } from '@mui/system';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -773,14 +775,44 @@ const Chat = () => {
                         >
                             ChatBot Juridique Marocain
                         </Typography>
-                    </Box>
-
-                    {/* User Info et Logout */}
+                    </Box>                    {/* User Info et Navigation */}
                     <Box sx={{ 
                         display: 'flex', 
                         alignItems: 'center',
                         gap: 2
                     }}>
+                        {/* Navigation Links */}
+                        <Box sx={{ 
+                            display: 'flex', 
+                            alignItems: 'center',
+                            gap: 1
+                        }}>
+                            <IconButton 
+                                onClick={() => navigate('/files')}
+                                sx={{ 
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                        color: 'primary.main'
+                                    }
+                                }}
+                                title="Gérer les fichiers"
+                            >
+                                <FolderIcon />
+                            </IconButton>
+                            <IconButton 
+                                onClick={() => navigate('/profile')}
+                                sx={{ 
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                        color: 'primary.main'
+                                    }
+                                }}
+                                title="Mon profil"
+                            >
+                                <AccountCircleIcon />
+                            </IconButton>
+                        </Box>
+                        
                         <Box sx={{ 
                             display: 'flex', 
                             alignItems: 'center',

@@ -2,6 +2,8 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Chat from './pages/Chat';
+import Profile from './pages/Profile';
+import Files from './pages/Files';
 import NotFound from './pages/NotFound';
 import { ThemeProvider, createTheme } from '@mui/material';
 
@@ -69,14 +71,29 @@ function App() {
     return (
         <ThemeProvider theme={theme}>
             <Router>
-                <Routes>
-                    <Route path="/login" element={<Login />} />
+                <Routes>                    <Route path="/login" element={<Login />} />
                     <Route path="/signup" element={<Signup />} />
                     <Route
                         path="/chat"
                         element={
                             <PrivateRoute>
                                 <Chat />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
+                        path="/profile"
+                        element={
+                            <PrivateRoute>
+                                <Profile />
+                            </PrivateRoute>
+                        }
+                    />
+                    <Route
+                        path="/files"
+                        element={
+                            <PrivateRoute>
+                                <Files />
                             </PrivateRoute>
                         }
                     />
