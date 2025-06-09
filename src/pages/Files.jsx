@@ -33,6 +33,13 @@ import InfoIcon from '@mui/icons-material/Info';
 import { uploadFiles, askFiles, getFileSession, deleteFileSession } from '../config/api';
 import ReactMarkdown from 'react-markdown';
 
+// Function to remove source citations like 【4:0†source】
+const removeSourceCitations = (text) => {
+    if (!text) return text;
+    // Remove citations in the format 【number:number†source】
+    return text.replace(/【\d+:\d+†source】/g, '');
+};
+
 const Files = () => {
     const [session, setSession] = useState(null);
     const [uploading, setUploading] = useState(false);
@@ -405,9 +412,8 @@ const Files = () => {
                                             maxHeight: 400,
                                             overflow: 'auto'
                                         }}
-                                    >
-                                        <ReactMarkdown>
-                                            {response}
+                                    >                                        <ReactMarkdown>
+                                            {removeSourceCitations(response)}
                                         </ReactMarkdown>
                                     </Paper>
                                 </>

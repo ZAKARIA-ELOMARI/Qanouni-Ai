@@ -36,6 +36,13 @@ import { keyframes } from '@mui/system';
 import CircularProgress from '@mui/material/CircularProgress';
 import ReactMarkdown from 'react-markdown';
 
+// Function to remove source citations like 【4:0†source】
+const removeSourceCitations = (text) => {
+    if (!text) return text;
+    // Remove citations in the format 【number:number†source】
+    return text.replace(/【\d+:\d+†source】/g, '');
+};
+
 // Animation du pulse
 const pulse = keyframes`
     0% { transform: scale(1); opacity: 0.4; }
@@ -600,7 +607,7 @@ const Chat = () => {
                             }
                         }}
                     >
-                        {msg.content}
+                        {removeSourceCitations(msg.content)}
                     </ReactMarkdown>
                 </Paper>
             </Box>
@@ -1125,4 +1132,4 @@ const Chat = () => {
     );
 };
 
-export default Chat; 
+export default Chat;
