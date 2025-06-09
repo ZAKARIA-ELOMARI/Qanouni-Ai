@@ -325,23 +325,7 @@ const Files = () => {
                                 <Typography variant="h6" sx={{ mb: 2 }}>
                                     Session Actuelle
                                 </Typography>
-                                <Stack spacing={2} sx={{ mb: 3 }}>
-                                    <Box>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Vector Store ID: <Chip label={session.vectorStoreId} size="small" />
-                                        </Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Utilisateur: {session.username}
-                                        </Typography>
-                                    </Box>
-                                    <Box>
-                                        <Typography variant="body2" color="text.secondary">
-                                            Fichiers disponibles: {session.hasFiles ? 'Oui' : 'Non'}
-                                        </Typography>
-                                    </Box>
-                                </Stack>
+                              
                                 
                                 <Typography variant="subtitle1" sx={{ mb: 2 }}>
                                     Documents téléchargés ({session.uploadedFiles?.length || 0})
