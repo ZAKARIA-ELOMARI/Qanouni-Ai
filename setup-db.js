@@ -19,10 +19,23 @@ async function setupDatabase() {
         password VARCHAR(255) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         request_count INT DEFAULT 0,
-        vector_store_id VARCHAR(255) DEFAULT NULL
+        vector_store_id VARCHAR(255) DEFAULT NULL,
+        is_admin BOOLEAN DEFAULT FALSE
       )
     `);
     console.log('Users table created or already exists');
+
+    // Add is_admin column if it doesn't exist (for existing databases)
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                      WHERE table_name='users' AND column_name='is_admin') THEN
+          ALTER TABLE users ADD COLUMN is_admin BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+    console.log('Added is_admin column to users table if it did not exist');
 
     // Create conversations table
     await client.query(`

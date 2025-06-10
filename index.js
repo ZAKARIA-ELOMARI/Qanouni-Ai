@@ -147,15 +147,14 @@ app.post(
                 { userId: user.id },
                 process.env.JWT_SECRET,
                 { expiresIn: '24h' }
-            );
-
-            res.json({
+            );            res.json({
                 success: true,
                 token,
                 user: {
                     id: user.id,
                     username: user.username,
                     email: user.email,
+                    is_admin: user.is_admin || false,
                 },
             });
         } catch (error) {
@@ -167,6 +166,55 @@ app.post(
         }
     }
 );
+
+// Special route to promote first user to admin (for initial setup)
+app.post('/api/promote-first-admin', async (req, res) => {
+    try {
+        const { email } = req.body;
+        
+        if (!email) {
+            return res.status(400).json({
+                success: false,
+                message: 'Email is required'
+            });
+        }
+        
+        // Check if there are any admins
+        const adminCount = await db.query('SELECT COUNT(*) as count FROM users WHERE is_admin = true');
+        
+        if (parseInt(adminCount.rows[0].count) > 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'Admin already exists. Use admin panel to manage users.'
+            });
+        }
+        
+        // Promote the specified user to admin
+        const result = await db.query(
+            'UPDATE users SET is_admin = true WHERE email = $1 RETURNING id, username, email, is_admin',
+            [email]
+        );
+        
+        if (result.rows.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'User not found'
+            });
+        }
+        
+        res.json({
+            success: true,
+            message: 'User promoted to admin successfully',
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error promoting user to admin:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error promoting user to admin'
+        });
+    }
+});
 
 // Use chat routes
 app.use('/api', chatRoutes);
