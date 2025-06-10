@@ -17,6 +17,7 @@ import {
     AppBar,
     Toolbar,
     Stack,
+    Tooltip,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import LogoutIcon from '@mui/icons-material/Logout';
@@ -27,11 +28,13 @@ import PersonIcon from '@mui/icons-material/Person';
 import MenuIcon from '@mui/icons-material/Menu';
 import EditIcon from '@mui/icons-material/Edit';
 import ShareIcon from '@mui/icons-material/Share';
+import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import FolderIcon from '@mui/icons-material/Folder';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import api from '../config/api';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import api, { exportConversation } from '../config/api';
 import { keyframes } from '@mui/system';
 import CircularProgress from '@mui/material/CircularProgress';
 import ReactMarkdown from 'react-markdown';
@@ -245,6 +248,8 @@ const Chat = () => {
     const [newTitle, setNewTitle] = useState('');
     const [isUpdatingTitle, setIsUpdatingTitle] = useState(false);
     const [currentSuggestionSet, setCurrentSuggestionSet] = useState(0);
+    const [exportAnchorEl, setExportAnchorEl] = useState(null);
+    const [exporting, setExporting] = useState(false);
 
     const allSuggestions = [
         // Set 1
@@ -457,8 +462,42 @@ const Chat = () => {
                 minute: '2-digit'
             }).format(date);
         } catch (error) {
-            console.error('Error formatting date:', error);
-            return 'À l\'instant';
+            return 'Date inconnue';
+        }
+    };
+
+    // Export conversation handlers
+    const handleOpenExportMenu = (event) => {
+        setExportAnchorEl(event.currentTarget);
+    };
+
+    const handleCloseExportMenu = () => {
+        setExportAnchorEl(null);
+    };
+
+    const handleExportConversation = async (format = 'json') => {
+        if (!currentConversation) return;
+        
+        try {
+            setExporting(true);
+            const response = await exportConversation(currentConversation, format);
+            
+            // Create a download link
+            const url = window.URL.createObjectURL(new Blob([response.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            link.setAttribute('download', `conversation_${currentConversation}.${format}`);
+            document.body.appendChild(link);
+            link.click();
+            
+            // Clean up and remove the link
+            link.parentNode.removeChild(link);
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error exporting conversation:', error);
+        } finally {
+            setExporting(false);
+            handleCloseExportMenu();
         }
     };
 
@@ -805,8 +844,7 @@ const Chat = () => {
                                 title="Gérer les fichiers"
                             >
                                 <FolderIcon />
-                            </IconButton>
-                            <IconButton 
+                            </IconButton>                            <IconButton 
                                 onClick={() => navigate('/profile')}
                                 sx={{ 
                                     color: 'text.secondary',
@@ -818,6 +856,20 @@ const Chat = () => {
                             >
                                 <AccountCircleIcon />
                             </IconButton>
+                            {user?.is_admin === true && (
+                                <IconButton 
+                                    onClick={() => navigate('/admin')}
+                                    sx={{ 
+                                        color: 'text.secondary',
+                                        '&:hover': {
+                                            color: 'primary.main'
+                                        }
+                                    }}
+                                    title="Administration"
+                                >
+                                    <AdminPanelSettingsIcon />
+                                </IconButton>
+                            )}
                         </Box>
                         
                         <Box sx={{ 
@@ -1023,15 +1075,154 @@ const Chat = () => {
                             Déconnexion
                         </Button>
                     </Box>
-                </Box>
-
-                {/* Chat Area */}
+                </Box>                {/* Chat Area */}
                 <Box sx={{ 
                     flex: 1, 
                     display: 'flex', 
                     flexDirection: 'column',
                     bgcolor: 'background.chat'
                 }}>
+                    {/* Chat Header - Only show when there's a conversation */}
+                    {currentConversation && (
+                        <Box sx={{ 
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            px: 3,
+                            py: 1.5,
+                            borderBottom: '1px solid',
+                            borderColor: 'divider',
+                            bgcolor: 'background.paper'
+                        }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <ChatIcon sx={{ mr: 1.5, color: 'primary.main' }} />
+                                {isEditingTitle ? (
+                                    <TextField
+                                        size="small"
+                                        value={newTitle}
+                                        onChange={(e) => setNewTitle(e.target.value)}
+                                        autoFocus
+                                        onBlur={() => {
+                                            if (newTitle.trim()) {
+                                                setIsUpdatingTitle(true);
+                                                api.put(`/conversations/${currentConversation}`, { title: newTitle.trim() })
+                                                    .then(response => {
+                                                        setConversations(prevConversations => 
+                                                            prevConversations.map(conv =>
+                                                                conv.id === currentConversation
+                                                                    ? { ...conv, title: newTitle.trim() }
+                                                                    : conv
+                                                            )
+                                                        );
+                                                    })
+                                                    .catch(error => console.error('Error updating title:', error))
+                                                    .finally(() => {
+                                                        setIsUpdatingTitle(false);
+                                                        setIsEditingTitle(false);
+                                                    });
+                                            } else {
+                                                setIsEditingTitle(false);
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' && newTitle.trim()) {
+                                                e.preventDefault();
+                                                e.target.blur();
+                                            } else if (e.key === 'Escape') {
+                                                setIsEditingTitle(false);
+                                            }
+                                        }}
+                                        InputProps={{
+                                            endAdornment: isUpdatingTitle && (
+                                                <CircularProgress size={20} sx={{ color: 'primary.main' }} />
+                                            )
+                                        }}
+                                        sx={{ minWidth: 200 }}
+                                    />
+                                ) : (
+                                    <Typography 
+                                        variant="subtitle1"
+                                        sx={{ 
+                                            fontWeight: 500,
+                                            color: 'text.primary'
+                                        }}
+                                    >
+                                        {conversations.find(c => c.id === currentConversation)?.title || 'Conversation'}
+                                    </Typography>
+                                )}
+                            </Box>
+                            
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                {!isEditingTitle && (
+                                    <>
+                                        <Tooltip title="Modifier le titre">
+                                            <IconButton 
+                                                size="small" 
+                                                onClick={() => {
+                                                    setNewTitle(conversations.find(c => c.id === currentConversation)?.title || '');
+                                                    setIsEditingTitle(true);
+                                                }}
+                                                sx={{ 
+                                                    color: 'text.secondary',
+                                                    '&:hover': { color: 'primary.main' }
+                                                }}
+                                            >
+                                                <EditIcon fontSize="small" />
+                                            </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Tooltip title="Exporter la conversation">
+                                            <IconButton 
+                                                size="small"
+                                                onClick={handleOpenExportMenu}
+                                                disabled={exporting}
+                                                sx={{ 
+                                                    color: 'text.secondary',
+                                                    '&:hover': { color: 'primary.main' }
+                                                }}
+                                            >
+                                                <FileDownloadIcon fontSize="small" />
+                                                {exporting && (
+                                                    <CircularProgress
+                                                        size={24}
+                                                        sx={{
+                                                            position: 'absolute',
+                                                            color: 'primary.main',
+                                                        }}
+                                                    />
+                                                )}
+                                            </IconButton>
+                                        </Tooltip>
+                                        
+                                        <Menu
+                                            anchorEl={exportAnchorEl}
+                                            open={Boolean(exportAnchorEl)}
+                                            onClose={handleCloseExportMenu}
+                                            anchorOrigin={{
+                                                vertical: 'bottom',
+                                                horizontal: 'right',
+                                            }}
+                                            transformOrigin={{
+                                                vertical: 'top',
+                                                horizontal: 'right',
+                                            }}
+                                        >
+                                            <MenuItem onClick={() => handleExportConversation('json')} disabled={exporting}>
+                                                Exporter en JSON
+                                            </MenuItem>
+                                            <MenuItem onClick={() => handleExportConversation('txt')} disabled={exporting}>
+                                                Exporter en Texte
+                                            </MenuItem>
+                                            <MenuItem onClick={() => handleExportConversation('md')} disabled={exporting}>
+                                                Exporter en Markdown
+                                            </MenuItem>
+                                        </Menu>
+                                    </>
+                                )}
+                            </Box>
+                        </Box>
+                    )}
+                    
                     {/* Messages Area */}
                     <Box sx={{ 
                         flex: 1, 

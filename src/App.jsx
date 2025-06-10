@@ -4,6 +4,7 @@ import Signup from './pages/Signup';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import Files from './pages/Files';
+import Admin from './pages/Admin';
 import NotFound from './pages/NotFound';
 import { ThemeProvider, createTheme } from '@mui/material';
 
@@ -67,6 +68,23 @@ const PrivateRoute = ({ children }) => {
     return token ? children : <Navigate to="/login" />;
 };
 
+const AdminRoute = ({ children }) => {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (!token) {
+        return <Navigate to="/login" />;
+    }
+    
+    if (userStr) {        const user = JSON.parse(userStr);
+        if (user.is_admin === true) {
+            return children;
+        }
+    }
+    
+    return <Navigate to="/chat" />;
+};
+
 function App() {
     return (
         <ThemeProvider theme={theme}>
@@ -88,16 +106,21 @@ function App() {
                                 <Profile />
                             </PrivateRoute>
                         }
-                    />
-                    <Route
+                    />                    <Route
                         path="/files"
                         element={
                             <PrivateRoute>
                                 <Files />
                             </PrivateRoute>
                         }
-                    />
-                    <Route path="/" element={<Navigate to="/login" />} />
+                    />                    <Route
+                        path="/admin"
+                        element={
+                            <AdminRoute>
+                                <Admin />
+                            </AdminRoute>
+                        }
+                    />                    <Route path="/" element={<Navigate to="/login" />} />
                     <Route path="*" element={<NotFound />} />
                 </Routes>
             </Router>

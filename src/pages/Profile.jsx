@@ -15,13 +15,17 @@ import {
     IconButton,
     Grid,
     Divider,
-    Stack
+    Stack,
+    InputAdornment
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PersonIcon from '@mui/icons-material/Person';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff';
 import { getProfile, updateProfile } from '../config/api';
 
 const Profile = () => {
@@ -29,12 +33,16 @@ const Profile = () => {
     const [editMode, setEditMode] = useState(false);
     const [formData, setFormData] = useState({
         username: '',
-        email: ''
+        email: '',
+        password: '',
+        confirmPassword: ''
     });
     const [loading, setLoading] = useState(true);
     const [updating, setUpdating] = useState(false);
     const [error, setError] = useState('');
     const [success, setSuccess] = useState('');
+    const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -46,10 +54,11 @@ const Profile = () => {
             setLoading(true);
             const response = await getProfile();
             if (response.data.success) {
-                setProfile(response.data.profile);
-                setFormData({
+                setProfile(response.data.profile);                setFormData({
                     username: response.data.profile.username,
-                    email: response.data.profile.email
+                    email: response.data.profile.email,
+                    password: '',
+                    confirmPassword: ''
                 });
             }
         } catch (error) {
@@ -68,12 +77,10 @@ const Profile = () => {
         }));
         setError('');
         setSuccess('');
-    };
-
-    const handleSubmit = async (e) => {
+    };    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!formData.username.trim() || !formData.email.trim()) {
-            setError('Veuillez remplir tous les champs.');
+            setError('Veuillez remplir tous les champs obligatoires.');
             return;
         }
 
@@ -82,15 +89,46 @@ const Profile = () => {
             return;
         }
 
+        // Check password validation only if password field is filled
+        if (formData.password) {
+            if (formData.password.length < 8) {
+                setError('Le mot de passe doit contenir au moins 8 caractères.');
+                return;
+            }
+
+            if (formData.password !== formData.confirmPassword) {
+                setError('Les mots de passe ne correspondent pas.');
+                return;
+            }
+        }
+
+        // Prepare data to submit (exclude confirmPassword field)
+        const dataToSubmit = {
+            username: formData.username,
+            email: formData.email
+        };
+
+        // Only include password if it was provided
+        if (formData.password) {
+            dataToSubmit.password = formData.password;
+        }
+
         try {
             setUpdating(true);
             setError('');
-            const response = await updateProfile(formData);
+            const response = await updateProfile(dataToSubmit);
             
             if (response.data.success) {
                 setProfile(response.data.profile);
                 setSuccess('Profil mis à jour avec succès !');
                 setEditMode(false);
+                
+                // Clear password fields
+                setFormData(prev => ({
+                    ...prev,
+                    password: '',
+                    confirmPassword: ''
+                }));
                 
                 // Update user in localStorage
                 const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -110,16 +148,24 @@ const Profile = () => {
         } finally {
             setUpdating(false);
         }
-    };
-
-    const handleCancel = () => {
+    };const handleCancel = () => {
         setFormData({
             username: profile.username,
-            email: profile.email
+            email: profile.email,
+            password: '',
+            confirmPassword: ''
         });
         setEditMode(false);
         setError('');
         setSuccess('');
+    };
+
+    const togglePasswordVisibility = () => {
+        setShowPassword(!showPassword);
+    };
+
+    const toggleConfirmPasswordVisibility = () => {
+        setShowConfirmPassword(!showConfirmPassword);
     };
 
     const formatDate = (dateString) => {
@@ -162,8 +208,7 @@ const Profile = () => {
                     borderColor: 'divider',
                 }}
                 elevation={0}
-            >
-                <Toolbar>
+            >                <Toolbar>
                     <IconButton 
                         edge="start" 
                         onClick={() => navigate('/chat')}
@@ -175,11 +220,26 @@ const Profile = () => {
                         variant="h6" 
                         sx={{ 
                             color: 'text.primary',
-                            fontWeight: 600
+                            fontWeight: 600,
+                            flex: 1
                         }}
                     >
                         Mon Profil
                     </Typography>
+                    {profile?.is_admin === true && (
+                        <IconButton 
+                            onClick={() => navigate('/admin')}
+                            sx={{ 
+                                color: 'text.secondary',
+                                '&:hover': {
+                                    color: 'primary.main'
+                                }
+                            }}
+                            title="Administration"
+                        >
+                            <AdminPanelSettingsIcon />
+                        </IconButton>
+                    )}
                 </Toolbar>
             </AppBar>
 
@@ -282,8 +342,7 @@ const Profile = () => {
                                     size="large"
                                     sx={{ mb: 3 }}
                                 />
-                            </Grid>
-                            <Grid item xs={12} md={6}>
+                            </Grid><Grid item xs={12} md={6}>
                                 <TextField
                                     fullWidth
                                     label="Date de création"
@@ -294,8 +353,79 @@ const Profile = () => {
                                     sx={{ mb: 3 }}
                                 />
                             </Grid>
-                            
-                        </Grid>
+                            {editMode && (
+                                <>                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            fullWidth
+                                            label="Nouveau mot de passe"
+                                            name="password"
+                                            type={showPassword ? 'text' : 'password'}
+                                            value={formData.password}
+                                            onChange={handleChange}
+                                            disabled={updating}
+                                            variant="outlined"
+                                            size="large"
+                                            sx={{ mb: 3 }}
+                                            helperText="Laissez vide pour conserver votre mot de passe actuel"
+                                            InputProps={{
+                                                endAdornment: (
+                                                    <InputAdornment position="end">
+                                                        <IconButton
+                                                            onClick={togglePasswordVisibility}
+                                                            edge="end"
+                                                            disabled={updating}
+                                                            sx={{ 
+                                                                color: 'text.secondary',
+                                                                '&:hover': {
+                                                                    color: 'primary.main'
+                                                                }
+                                                            }}
+                                                        >
+                                                            {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                                        </IconButton>
+                                                    </InputAdornment>
+                                                )
+                                            }}
+                                        />
+                                    </Grid>
+                                    <Grid item xs={12} md={6}>
+                                        <TextField
+                                            fullWidth
+                                            label="Confirmer le nouveau mot de passe"
+                                            name="confirmPassword"
+                                            type={showConfirmPassword ? 'text' : 'password'}
+                                            value={formData.confirmPassword}
+                                            onChange={handleChange}
+                                            disabled={updating || !formData.password}
+                                            variant="outlined"
+                                            size="large"
+                                            sx={{ mb: 3 }}
+                                            error={formData.password && formData.password !== formData.confirmPassword}
+                                            helperText={formData.password && formData.password !== formData.confirmPassword ? 
+                                                "Les mots de passe ne correspondent pas" : ""}
+                                            InputProps={{
+                                                endAdornment: (
+                                                    <InputAdornment position="end">                                                <IconButton
+                                                            onClick={toggleConfirmPasswordVisibility}
+                                                            edge="end"
+                                                            disabled={updating || !formData.password}
+                                                            sx={{ 
+                                                                color: 'text.secondary',
+                                                                '&:hover': {
+                                                                    color: 'primary.main'
+                                                                }
+                                                            }}
+                                                        >
+                                                            {showConfirmPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                                                        </IconButton>
+                                                    </InputAdornment>
+                                                )
+                                            }}
+                                        />
+                                    </Grid>
+                                </>
+                            )}
+                            </Grid>
 
                         {/* Action Buttons */}
                         {editMode && (

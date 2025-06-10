@@ -30,6 +30,7 @@ import SendIcon from '@mui/icons-material/Send';
 import DescriptionIcon from '@mui/icons-material/Description';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import InfoIcon from '@mui/icons-material/Info';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import { uploadFiles, askFiles, getFileSession, deleteFileSession } from '../config/api';
 import ReactMarkdown from 'react-markdown';
 
@@ -50,10 +51,15 @@ const Files = () => {
     const [asking, setAsking] = useState(false);
     const [response, setResponse] = useState('');
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [user, setUser] = useState(null);
     const fileInputRef = useRef(null);
     const navigate = useNavigate();
 
     useEffect(() => {
+        const userStr = localStorage.getItem('user');
+        if (userStr) {
+            setUser(JSON.parse(userStr));
+        }
         fetchSession();
     }, []);
 
@@ -236,8 +242,7 @@ const Files = () => {
                         sx={{ color: 'text.primary', mr: 2 }}
                     >
                         <ArrowBackIcon />
-                    </IconButton>
-                    <Typography 
+                    </IconButton>                    <Typography 
                         variant="h6" 
                         sx={{ 
                             color: 'text.primary',
@@ -247,17 +252,33 @@ const Files = () => {
                     >
                         Gestion des Documents
                     </Typography>
-                    {session && (
-                        <Button
-                            variant="outlined"
-                            color="error"
-                            startIcon={<DeleteIcon />}
-                            onClick={handleDeleteSession}
-                            size="small"
-                        >
-                            Supprimer Session
-                        </Button>
-                    )}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {user?.is_admin === true && (
+                            <IconButton 
+                                onClick={() => navigate('/admin')}
+                                sx={{ 
+                                    color: 'text.secondary',
+                                    '&:hover': {
+                                        color: 'primary.main'
+                                    }
+                                }}
+                                title="Administration"
+                            >
+                                <AdminPanelSettingsIcon />
+                            </IconButton>
+                        )}
+                        {session && (
+                            <Button
+                                variant="outlined"
+                                color="error"
+                                startIcon={<DeleteIcon />}
+                                onClick={handleDeleteSession}
+                                size="small"
+                            >
+                                Supprimer Session
+                            </Button>
+                        )}
+                    </Box>
                 </Toolbar>
             </AppBar>
 

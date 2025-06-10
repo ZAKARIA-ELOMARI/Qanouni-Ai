@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-    baseURL: 'https://chatbot-api-production-2763.up.railway.app/api',
+    baseURL: 'http://localhost:3001/api',
     headers: {
         'Content-Type': 'application/json',
     },
@@ -37,6 +37,13 @@ export const deleteFileSession = () => {
     return api.delete('/files/session');
 };
 
+// Conversation management functions
+export const exportConversation = (conversationId, format = 'json') => {
+    return api.get(`/conversations/${conversationId}/export?format=${format}`, {
+        responseType: 'blob' // Important: This tells axios to handle the response as a binary blob
+    });
+};
+
 // Profile management functions
 export const getProfile = () => {
     return api.get('/profile');
@@ -44,6 +51,23 @@ export const getProfile = () => {
 
 export const updateProfile = (data) => {
     return api.put('/profile', data);
+};
+
+// Admin management functions
+export const getAdminStats = () => {
+    return api.get('/admin/stats');
+};
+
+export const getAllUsers = () => {
+    return api.get('/admin/users');
+};
+
+export const getUserDetails = (userId) => {
+    return api.get(`/admin/users/${userId}`);
+};
+
+export const deleteUser = (userId) => {
+    return api.delete(`/admin/users/${userId}`);
 };
 
 export default api;
