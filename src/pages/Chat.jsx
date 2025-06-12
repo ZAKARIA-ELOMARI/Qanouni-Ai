@@ -819,7 +819,7 @@ const Chat = () => {
                                 display: { xs: 'none', sm: 'block' }
                             }}
                         >
-                            ChatBot Juridique Marocain
+                            Qanouni-AI
                         </Typography>
                     </Box>                    {/* User Info et Navigation */}
                     <Box sx={{ 
