@@ -163,7 +163,7 @@ const Login = () => {
                                     mb: 1,
                                 }}
                             >
-                                ChatBot Juridique
+                                Qanouni-AI
                             </Typography>                            <Typography
                                 variant="subtitle1"
                                 align="center"
