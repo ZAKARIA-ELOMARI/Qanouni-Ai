@@ -69,9 +69,7 @@ const Login = () => {
             setError("Veuillez saisir une adresse email valide.");
             setIsLoading(false);
             return;
-        }
-
-        try {
+        }        try {
             const response = await api.post('/login', { 
                 email, 
                 password,
@@ -79,16 +77,21 @@ const Login = () => {
             });
             
             if (response.data.success) {
-                localStorage.setItem('token', response.data.token);
+                  localStorage.setItem('token', response.data.token);
                 localStorage.setItem('user', JSON.stringify(response.data.user));
                 if (rememberMe) {
                     localStorage.setItem('rememberedEmail', email);
                 } else {
                     localStorage.removeItem('rememberedEmail');
                 }
-                navigate('/chat');
-            }
-        } catch (err) {
+                
+                // Redirect admin users to admin panel, regular users to chat
+                if (response.data.user.is_admin === true) {
+                    navigate('/admin');
+                } else {
+                    navigate('/chat');
+                }
+            }        } catch (err) {
             setError(getErrorMessage(err));
         } finally {
             setIsLoading(false);
@@ -160,17 +163,15 @@ const Login = () => {
                                     mb: 1,
                                 }}
                             >
-                                ChatBot Juridique
-                            </Typography>
-                            <Typography
+                                Qanouni-AI
+                            </Typography>                            <Typography
                                 variant="subtitle1"
                                 align="center"
                                 sx={{
                                     color: 'text.secondary',
                                     mb: 3,
                                     maxWidth: '80%',
-                                }}
-                            >
+                                }}                            >
                                 Votre assistant juridique intelligent au Maroc
                             </Typography>
                         </Box>
@@ -312,9 +313,7 @@ const Login = () => {
                                 ) : (
                                     'Se connecter'
                                 )}
-                            </Button>
-
-                            <Button
+                            </Button>                            <Button
                                 fullWidth
                                 variant="outlined"
                                 onClick={() => navigate('/signup')}
